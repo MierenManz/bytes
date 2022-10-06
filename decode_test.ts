@@ -216,19 +216,6 @@ Deno.test({
 });
 
 Deno.test({
-  name: "Decode Cstring",
-  fn: () => {
-
-    const data = new TextEncoder().encode("Hello World!\0");
-    const decoder = new ByteDecoder({value: "cstring"});
-
-    const { value } = decoder.decode(data);
-
-    assertEquals(value, "Hello World!");
-  }
-})
-
-Deno.test({
   name: "Decode Fixed-Size string",
   fn: () => {
 

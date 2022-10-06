@@ -8,11 +8,10 @@ export type AnyNumber = Number | BigInt;
 
 type Char = "char";
 
-export type CString = "cstring";
 export type FixedString = [Char, number];
-export type StringType = CString | FixedString;
+export type StringType =  FixedString;
 
-type FixedArray = [Exclude<ByteType, Char>, number];
+export type FixedArray = [Exclude<ByteType, Char>, number];
 
 export type ByteType = AnyNumber | StringType | FixedArray | Char;
 

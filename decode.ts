@@ -5,6 +5,7 @@ import type {
   Struct,
   Transform,
 } from "./types.ts";
+import { calculateStructSize } from "./util.ts";
 
 // type TypedArray =
 //   | Uint8Array
@@ -24,17 +25,12 @@ export class ByteDecoder<T extends Struct> {
   #transformStruct: T;
   #littleEndian: boolean;
   #offset = 0;
+  #structSize: number;
+
   constructor(struct: T, littleEndian = false) {
     this.#transformStruct = struct;
     this.#littleEndian = littleEndian;
-  }
-
-  #decodeCString(src: Uint8Array): string {
-    const start = this.#offset;
-    while (src[this.#offset.valueOf()] !== 0) this.#offset++;
-    const str = TEXT_DECODER.decode(src.subarray(start, this.#offset));
-    this.#offset++;
-    return str;
+    this.#structSize = calculateStructSize(struct);
   }
 
   // #decodeTypedArray(
@@ -96,16 +92,6 @@ export class ByteDecoder<T extends Struct> {
       if (value[0] === "char") {
         // Fixed String
         return this.#decodeFixedString(src, value[1]) as Transform<T>[keyof T];
-      } else if (value[0] === "cstring") {
-        // CString
-        const arr = [];
-        arr.length = value[1];
-
-        for (let i = 0; i < value[1]; i++) {
-          arr[i] = this.#decodeCString(src);
-        }
-
-        return arr as Transform<T>[keyof T];
       } else { // } else if (Array.isArray(value[0])) {
         // Multi-dimensional Array
         const arr = [];
@@ -124,9 +110,6 @@ export class ByteDecoder<T extends Struct> {
     }
 
     switch (value) {
-      case "cstring":
-        return this.#decodeCString(src) as Transform<T>[keyof T];
-
       case "char":
         return this.#decodeFixedString(src, 1) as Transform<T>[keyof T];
 
@@ -157,9 +140,7 @@ export class ByteDecoder<T extends Struct> {
       res[key as keyof T] = this.#decode(src, value);
     }
 
-    if (this.#offset !== src.length) {
-      console.log(this.#offset, src.length);
-      console.log({res});
+    if (this.#offset !== this.#structSize) {
       throw new Error("Struct size differs from byte size");
     }
 
