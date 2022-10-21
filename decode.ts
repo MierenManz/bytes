@@ -1,149 +1,205 @@
-import type {
-  // AnyNumber,
-  ByteType,
-  Number,
-  Struct,
-  Transform,
-} from "./types.ts";
-import { calculateStructSize } from "./util.ts";
-
-// type TypedArray =
-//   | Uint8Array
-//   | Int8Array
-//   | Uint16Array
-//   | Int16Array
-//   | Uint32Array
-//   | Int32Array
-//   | BigUint64Array
-//   | BigInt64Array
-//   | Float32Array
-//   | Float64Array;
+import type { ByteType, Struct, Transform, TransformValue } from "./types.ts";
 
 const TEXT_DECODER = new TextDecoder();
 
 export class ByteDecoder<T extends Struct> {
-  #transformStruct: T;
+  #transformStruct: { [P in keyof T]: () => TransformValue<T[P]> };
   #littleEndian: boolean;
+  #src!: Uint8Array;
+  #dataview!: DataView;
   #offset = 0;
-  #structSize: number;
 
   constructor(struct: T, littleEndian = false) {
-    this.#transformStruct = struct;
     this.#littleEndian = littleEndian;
-    this.#structSize = calculateStructSize(struct);
+    this.#transformStruct = this.#createDecoder(struct);
   }
 
-  // #decodeTypedArray(
-  //   src: Uint8Array,
-  //   kind: AnyNumber,
-  //   length: number,
-  // ): TypedArray {
-  //   return new Uint8Array();
-  // }
-
-  #decodeFixedString(src: Uint8Array, length: number): string {
-    const start = this.#offset;
-    this.#offset += length;
-    return TEXT_DECODER.decode(
-      src.subarray(start, this.#offset),
-    );
+  #cStringDecoder(): () => string {
+    return () => {
+      let length = 0;
+      while (this.#src[this.#offset + length] !== 0) length++;
+      return this.#stringDecoder(length)();
+    };
   }
 
-  #decodeNumber(src: Uint8Array, kind: Number): number {
-    const dt = new DataView(src.buffer, this.#offset);
-    this.#offset += parseInt(kind.slice(1)) >> 3;
-    switch (kind) {
-      case "i8":
-        return dt.getInt8(0);
-      case "u8":
-        return dt.getUint8(0);
-      case "i16":
-        return dt.getInt16(0, this.#littleEndian);
-      case "u16":
-        return dt.getUint16(0, this.#littleEndian);
-      case "i32":
-        return dt.getInt32(0, this.#littleEndian);
-      case "u32":
-        return dt.getUint32(0, this.#littleEndian);
-      case "f32":
-        return dt.getFloat32(0, this.#littleEndian);
-      case "f64":
-        return dt.getFloat64(0, this.#littleEndian);
-    }
+  #stringDecoder(length: number): () => string {
+    return () => {
+      const start = this.#offset;
+      this.#offset += length;
+      return TEXT_DECODER.decode(
+        this.#src.subarray(start, this.#offset),
+      );
+    };
   }
 
-  #decodeBigint(src: Uint8Array, isSigned: boolean): bigint {
-    const dt = new DataView(
-      src.buffer,
-      src.byteOffset + this.#offset,
-      src.length - this.#offset,
-    );
-
-    const value = isSigned
-      ? dt.getBigInt64(this.#offset, this.#littleEndian)
-      : dt.getBigUint64(this.#offset, this.#littleEndian);
-    this.#offset += 8;
-
-    return value;
+  #i8Decoder(): () => number {
+    const i8Decode = () => this.#dataview.getInt8(this.#offset++);
+    return i8Decode;
   }
 
-  #decode(src: Uint8Array, value: ByteType): Transform<T>[keyof T] {
-    if (Array.isArray(value)) {
-      if (value[0] === "char") {
-        // Fixed String
-        return this.#decodeFixedString(src, value[1]) as Transform<T>[keyof T];
-      } else { // } else if (Array.isArray(value[0])) {
-        // Multi-dimensional Array
-        const arr = [];
-        for (let i = 0; i < value[1]; i++) {
-          arr[i] = this.#decode(src, value[0]);
-        }
-        return arr as Transform<T>[keyof T];
+  #u8Decoder(): () => number {
+    const u8Decode = () => this.#dataview.getUint8(this.#offset++);
+    return u8Decode;
+  }
+
+  #i16Decoder(): () => number {
+    const i16Decode = () => {
+      const v = this.#dataview.getInt16(this.#offset, this.#littleEndian);
+      this.#offset += 2;
+      return v;
+    };
+
+    return i16Decode;
+  }
+
+  #u16Decoder(): () => number {
+    const u16Decode = () => {
+      const v = this.#dataview.getUint16(this.#offset, this.#littleEndian);
+      this.#offset += 2;
+      return v;
+    };
+
+    return u16Decode;
+  }
+
+  #i32Decoder(): () => number {
+    const i32Decode = () => {
+      const v = this.#dataview.getInt32(this.#offset, this.#littleEndian);
+      this.#offset += 4;
+      return v;
+    };
+
+    return i32Decode;
+  }
+
+  #u32Decoder(): () => number {
+    const u32Decode = () => {
+      const v = this.#dataview.getUint32(this.#offset, this.#littleEndian);
+      this.#offset += 4;
+      return v;
+    };
+
+    return u32Decode;
+  }
+
+  #i64Decoder(): () => bigint {
+    const i64Decode = () => {
+      const v = this.#dataview.getBigInt64(this.#offset, this.#littleEndian);
+      this.#offset += 8;
+      return v;
+    };
+
+    return i64Decode;
+  }
+
+  #u64Decoder(): () => bigint {
+    const u64Decode = () => {
+      const v = this.#dataview.getBigUint64(this.#offset, this.#littleEndian);
+      this.#offset += 8;
+      return v;
+    };
+
+    return u64Decode;
+  }
+
+  #f32Decoder(): () => number {
+    const f32Decode = () => {
+      const v = this.#dataview.getFloat32(this.#offset, this.#littleEndian);
+      this.#offset += 4;
+      return v;
+    };
+
+    return f32Decode;
+  }
+
+  #f64Decoder(): () => number {
+    const f64Decode = () => {
+      const v = this.#dataview.getFloat64(this.#offset, this.#littleEndian);
+      this.#offset += 8;
+      return v;
+    };
+
+    return f64Decode;
+  }
+
+  #createArrayDecoder(type: ByteType, length: number): () => ByteType[] {
+    let callable: CallableFunction;
+    if (Array.isArray(type)) {
+      if (type[0] === "char") {
+        callable = this.#stringDecoder(type[1]);
+      } else {
+        callable = this.#createArrayDecoder(type[0], type[1]) as () =>
+          TransformValue<
+            ByteType
+          >;
       }
-
-      // Typed Array
-      // return this.#decodeTypedArray(
-      //   src,
-      //   value[0],
-      //   value[1],
-      // ) as Transform<T>[keyof T];
+    } else {
+      callable = this.#createValueDecoder(type);
     }
 
-    switch (value) {
+    return () => {
+      const arr: null[] = [];
+      arr.length = length;
+      return arr.fill(null).map((_) => callable()) as ByteType[];
+    };
+  }
+
+  #createValueDecoder(type: ByteType): () => TransformValue<ByteType> {
+    if (Array.isArray(type)) {
+      if (type[0] === "char") {
+        return this.#stringDecoder(type[1]);
+      }
+      return this.#createArrayDecoder(type[0], type[1]) as () => TransformValue<
+        ByteType
+      >;
+    }
+
+    switch (type) {
       case "char":
-        return this.#decodeFixedString(src, 1) as Transform<T>[keyof T];
-
+        return this.#stringDecoder(1);
+      case "cstring":
+        return this.#cStringDecoder();
       case "u8":
+        return this.#u8Decoder();
       case "i8":
+        return this.#i8Decoder();
       case "u16":
+        return this.#u16Decoder();
       case "i16":
+        return this.#i16Decoder();
       case "u32":
+        return this.#u32Decoder();
       case "i32":
-      case "f32":
-      case "f64":
-        return this.#decodeNumber(src, value) as Transform<T>[keyof T];
+        return this.#i32Decoder();
       case "u64":
+        return this.#u64Decoder();
       case "i64":
-        return this.#decodeBigint(
-          src,
-          value === "i64",
-        ) as Transform<T>[keyof T];
+        return this.#i64Decoder();
+      case "f32":
+        return this.#f32Decoder();
+      case "f64":
+        return this.#f64Decoder();
     }
+  }
+
+  #createDecoder(struct: T): { [P in keyof T]: () => TransformValue<T[P]> } {
+    const record: Record<string, CallableFunction> = {};
+    for (const [key, value] of Object.entries(struct)) {
+      record[key] = this.#createValueDecoder(value);
+    }
+
+    return record as { [P in keyof T]: () => TransformValue<T[P]> };
   }
 
   decode(src: Uint8Array): Transform<T> {
-    const res: Transform<T> = {} as Transform<T>;
-
+    this.#dataview = new DataView(src.buffer, src.byteOffset, src.byteLength);
+    this.#src = src;
     this.#offset = 0;
 
-    for (const [key, value] of Object.entries(this.#transformStruct)) {
-      res[key as keyof T] = this.#decode(src, value);
-    }
-
-    if (this.#offset !== this.#structSize) {
-      throw new Error("Struct size differs from byte size");
-    }
-
-    return res as Transform<T>;
+    return Object.entries(this.#transformStruct)
+      .reduce((acc, kv) => {
+        acc[kv[0] as keyof T] = kv[1]();
+        return acc;
+      }, {} as Transform<T>);
   }
 }

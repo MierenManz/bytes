@@ -207,26 +207,25 @@ Deno.test({
   name: "Decode Char",
   fn: () => {
     const data = new TextEncoder().encode("a");
-    const decoder = new ByteDecoder({value: "char"});
+    const decoder = new ByteDecoder({ value: "char" });
 
     const { value } = decoder.decode(data);
 
     assertEquals(value, "a");
-  }
+  },
 });
 
 Deno.test({
   name: "Decode Fixed-Size string",
   fn: () => {
-
     const data = new TextEncoder().encode("Hello World!");
-    const decoder = new ByteDecoder({value: ["char", data.length]});
+    const decoder = new ByteDecoder({ value: ["char", data.length] });
 
     const { value } = decoder.decode(data);
 
     assertEquals(value, "Hello World!");
-  }
-})
+  },
+});
 
 Deno.test({
   name: "Decode 2DArray",
@@ -235,10 +234,10 @@ Deno.test({
     const world = new TextEncoder().encode("World");
     const data = Uint8Array.of(...hello, ...world);
 
-    const decoder = new ByteDecoder({value: [["char", hello.length], 2]})
+    const decoder = new ByteDecoder({ value: [["char", hello.length], 2] });
 
     const { value } = decoder.decode(data);
 
-    assertEquals(value, ["Hello", "World"])
-  }
-})
+    assertEquals(value, ["Hello", "World"]);
+  },
+});

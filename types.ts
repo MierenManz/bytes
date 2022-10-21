@@ -9,11 +9,11 @@ export type AnyNumber = Number | BigInt;
 type Char = "char";
 
 export type FixedString = [Char, number];
-export type StringType =  FixedString;
+export type StringType = FixedString | "cstring";
 
-export type FixedArray = [Exclude<ByteType, Char>, number];
+export type FixedArray = [ByteType, number];
 
-export type ByteType = AnyNumber | StringType | FixedArray | Char;
+export type ByteType = FixedArray | AnyNumber | StringType | Char;
 
 export type Struct = Record<string, ByteType>;
 
@@ -26,9 +26,9 @@ type TransformArray<T extends ByteType> = //T extends "u8" ? Uint8Array
   // : T extends "u64" ? BigUint64Array
   // : T extends "i64" ? BigInt64Array :
   T extends "char" ? string
-    : TransformValue<T>[];
+    : Array<TransformValue<T>>;
 
-type TransformValue<T extends ByteType> = T extends FixedArray
+export type TransformValue<T extends ByteType> = T extends FixedArray
   ? TransformArray<T[0]>
   : T extends StringType | Char ? string
   : T extends BigInt ? bigint
